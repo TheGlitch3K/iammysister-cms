@@ -28,27 +28,13 @@ export function useSistersData() {
     try {
       setLoading(true);
       
-      // Check if we're in production/static mode (GitHub Pages)
-      const isStatic = typeof window !== 'undefined' && 
-        (!window.location.origin.includes('localhost') && 
-         !window.location.origin.includes('127.0.0.1'));
-      
-      if (isStatic) {
-        // Use static data for GitHub Pages
-        setSisters(staticClientData);
-      } else {
-        try {
-          // Use API for local development
-          const response = await fetch('/api/clients');
-          const result = await response.json();
-          const data = result.data || result;
-          const sistersArray = Array.isArray(data) ? data : [];
-          setSisters(sistersArray);
-        } catch (apiError) {
-          console.log('API unavailable, using static data');
-          setSisters(staticClientData);
-        }
-      }
+      // Always use static data for GitHub Pages
+      const mappedData = staticClientData.map(client => ({
+        ...client,
+        mentalScore: client.mentalHealthScore || client.mentalScore,
+        createdAt: client.timestamp
+      }));
+      setSisters(mappedData);
     } catch (error) {
       console.error('Error loading sisters:', error);
       setSisters(staticClientData);
