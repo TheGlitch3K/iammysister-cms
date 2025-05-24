@@ -9,6 +9,7 @@ import ChartWrapper from '../components/Reports/ChartWrapper';
 import CustomReportBuilder from '../components/Reports/CustomReportBuilder';
 import { ReportCalculations } from '../utils/reportCalculations';
 import { ExportUtilities } from '../utils/exportUtilities';
+import { useSistersData } from '../hooks/useSistersData';
 
 const PageHeader = styled.div`
   display: flex;
@@ -137,49 +138,81 @@ const REPORT_TABS = [
 ];
 
 export default function Reports() {
-  const [loading, setLoading] = useState(true);
+  const { sisters, loading: dataLoading } = useSistersData();
   const [activeTab, setActiveTab] = useState('overview');
   const [dateRange, setDateRange] = useState({
     start: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 1 year ago
     end: new Date().toISOString().split('T')[0]
   });
   const [exporting, setExporting] = useState(false);
-  const [reportData, setReportData] = useState(null);
-  const [allData, setAllData] = useState(null);
 
   // Initialize export utilities
   const exportUtils = useMemo(() => new ExportUtilities(), []);
 
-  useEffect(() => {
-    loadReportData();
-  }, [dateRange]);
-
-  const loadReportData = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch('/api/clients');
-      const result = await response.json();
-      const clients = result.data || [];
-      
-      // Use ONLY real client data - NO MOCK DATA
-      const realData = {
-        clients: clients,
-        volunteers: [], // Real volunteer data will be added when available
-        donors: [], // Real donor data will be added when available  
-        financials: [], // Real financial data will be added when available
-        grants: [] // Real grant data will be added when available
-      };
-
-      const calculations = new ReportCalculations(realData);
-      setAllData(realData);
-      setReportData(calculations);
-      
-    } catch (error) {
-      console.error('Error loading report data:', error);
-    } finally {
-      setLoading(false);
+  // Process report data from sisters
+  const reportData = useMemo(() => {
+    if (!Array.isArray(sisters) || sisters.length === 0) {
+      return null;
     }
-  };
+
+    // Create the data structure for ReportCalculations
+    const realData = {
+      clients: sisters,
+      volunteers: [], // Real volunteer data will be added when available
+      donors: [], // Real donor data will be added when available  
+      financials: [], // Real financial data will be added when available
+      grants: [] // Real grant data will be added when available
+    };
+
+    return new ReportCalculations(realData);
+  }, [sisters]);
+
+  // Calculate enhanced stats from sisters data
+  const enhancedStats = useMemo(() => {
+    if (!Array.isArray(sisters) || sisters.length === 0) {
+      return {
+        total: 0,
+        newClients: 0,
+        housingReady: 0,
+        avgMentalHealth: 0,
+        totalSavings: 0,
+        avgCreditScore: 0,
+        completionRate: 0,
+        avgIncomeIncrease: 0
+      };
+    }
+
+    const total = sisters.length;
+    const newClients = sisters.filter(s => s.status === 'new').length;
+    const housingReady = sisters.filter(s => 
+      (s.creditScore || 0) >= 620 && (s.monthlyIncome || 0) >= 3000
+    ).length;
+    const avgMentalHealth = total > 0 ? 
+      (sisters.reduce((sum, s) => sum + (s.mentalScore || s.mentalHealthScore || 5), 0) / total).toFixed(1) 
+      : 0;
+    const totalSavings = sisters.reduce((sum, s) => sum + (s.savingsAmount || 0), 0);
+    const avgCreditScore = Math.round(sisters.reduce((sum, s) => sum + (s.creditScore || 0), 0) / total);
+    const qualifiedSisters = sisters.filter(s => s.status === 'qualified').length;
+    const completionRate = total > 0 ? Math.round((qualifiedSisters / total) * 100) : 0;
+    
+    // Calculate estimated community value based on income improvements
+    const estimatedValue = sisters.reduce((sum, s) => {
+      const monthlyIncome = s.monthlyIncome || 0;
+      const estimatedAnnualValue = monthlyIncome * 12 * 0.3; // 30% improvement factor
+      return sum + estimatedAnnualValue;
+    }, 0);
+
+    return {
+      total,
+      newClients,
+      housingReady,
+      avgMentalHealth,
+      totalSavings,
+      avgCreditScore,
+      completionRate,
+      estimatedValue
+    };
+  }, [sisters]);
 
   const handleExport = async (data, type, format) => {
     try {
@@ -204,7 +237,7 @@ export default function Reports() {
     if (!reportData) return;
     
     const combinedData = {
-      ...allData,
+      clients: sisters,
       demographics: reportData.getDemographicBreakdown(),
       geographic: reportData.getGeographicDistribution(),
       serviceVolume: reportData.getServiceVolumeOverTime(),
@@ -219,7 +252,7 @@ export default function Reports() {
     await handleExport(combinedData, 'comprehensive', format);
   };
 
-  if (loading) {
+  if (dataLoading) {
     return (
       <ReportsLayout>
         <LoadingScreen>
@@ -343,27 +376,27 @@ export default function Reports() {
               }}>
                 <div>
                   <div style={{ fontSize: '2.5rem', fontWeight: '700', color: '#14B8A6' }}>
-                    {allData?.clients?.length || 0}
+                    {enhancedStats.total}
                   </div>
                   <div style={{ fontSize: '1rem', color: '#6B7280' }}>Total Sisters Served</div>
                 </div>
                 <div>
                   <div style={{ fontSize: '2.5rem', fontWeight: '700', color: '#F59E0B' }}>
-                    ${reportData.getFinancialAnalysis()?.costPerClient || 0}
+                    {enhancedStats.avgCreditScore}
                   </div>
-                  <div style={{ fontSize: '1rem', color: '#6B7280' }}>Cost per Sister</div>
+                  <div style={{ fontSize: '1rem', color: '#6B7280' }}>Average Credit Score</div>
                 </div>
                 <div>
                   <div style={{ fontSize: '2.5rem', fontWeight: '700', color: '#8B5CF6' }}>
-                    {reportData.getROIAnalysis()?.roi || 0}%
+                    {enhancedStats.completionRate}%
                   </div>
-                  <div style={{ fontSize: '1rem', color: '#6B7280' }}>Return on Investment</div>
+                  <div style={{ fontSize: '1rem', color: '#6B7280' }}>Program Success Rate</div>
                 </div>
                 <div>
                   <div style={{ fontSize: '2.5rem', fontWeight: '700', color: '#10B981' }}>
-                    {allData?.volunteers?.length || 0}
+                    {enhancedStats.housingReady}
                   </div>
-                  <div style={{ fontSize: '1rem', color: '#6B7280' }}>Active Volunteers</div>
+                  <div style={{ fontSize: '1rem', color: '#6B7280' }}>Housing Ready</div>
                 </div>
               </div>
               
@@ -382,6 +415,38 @@ export default function Reports() {
                   homeownership programs, and entrepreneurship support. Our data-driven approach 
                   ensures every sister receives personalized support for lasting transformation.
                 </p>
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', 
+                  gap: '1rem',
+                  marginTop: '1.5rem',
+                  textAlign: 'center'
+                }}>
+                  <div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: '700' }}>
+                      ${Math.round(enhancedStats.totalSavings / 1000)}K
+                    </div>
+                    <div style={{ fontSize: '0.875rem', opacity: '0.9' }}>
+                      Collective Savings
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: '700' }}>
+                      {enhancedStats.avgMentalHealth}/10
+                    </div>
+                    <div style={{ fontSize: '0.875rem', opacity: '0.9' }}>
+                      Wellness Score
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: '700' }}>
+                      ${Math.round(enhancedStats.estimatedValue / 1000)}K
+                    </div>
+                    <div style={{ fontSize: '0.875rem', opacity: '0.9' }}>
+                      Estimated Impact Value
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </ChartWrapper>
@@ -434,16 +499,16 @@ export default function Reports() {
                   </h4>
                   <div style={{ marginBottom: '1rem' }}>
                     <div style={{ fontSize: '2rem', fontWeight: '700', color: '#15803D' }}>
-                      72%
+                      {enhancedStats.completionRate}%
                     </div>
                     <div style={{ fontSize: '0.875rem', color: '#166534' }}>
                       Overall completion rate
                     </div>
                   </div>
                   <div style={{ fontSize: '0.875rem', color: '#166534' }}>
-                    • 85% improve credit scores<br/>
-                    • 68% achieve stable housing<br/>
-                    • 71% increase monthly income
+                    • {enhancedStats.housingReady} sisters housing-ready<br/>
+                    • {enhancedStats.avgCreditScore} average credit score<br/>
+                    • {enhancedStats.total} total sisters enrolled
                   </div>
                 </div>
 
@@ -459,20 +524,20 @@ export default function Reports() {
                   </h4>
                   <div style={{ marginBottom: '1rem' }}>
                     <div style={{ fontSize: '2rem', fontWeight: '700', color: '#D97706' }}>
-                      $2.1M
+                      ${Math.round(enhancedStats.estimatedValue / 1000)}K
                     </div>
                     <div style={{ fontSize: '0.875rem', color: '#92400E' }}>
                       Estimated community value created
                     </div>
                   </div>
                   <div style={{ fontSize: '0.875rem', color: '#92400E' }}>
-                    • $427 avg monthly income increase<br/>
-                    • 47-point avg credit score improvement<br/>
-                    • $8,200 avg savings growth
+                    • ${Math.round(enhancedStats.totalSavings / 1000)}K collective savings<br/>
+                    • {enhancedStats.avgCreditScore} average credit score<br/>
+                    • {enhancedStats.housingReady} sisters ready for homeownership
                   </div>
                 </div>
 
-                {/* Long-term Outcomes */}
+                {/* Well-being Outcomes */}
                 <div style={{ 
                   background: '#EDE9FE', 
                   borderRadius: '0.75rem', 
@@ -480,20 +545,20 @@ export default function Reports() {
                   border: '1px solid #C4B5FD'
                 }}>
                   <h4 style={{ color: '#7C3AED', fontWeight: '600', marginBottom: '1rem' }}>
-                    Long-term Success
+                    Well-being Success
                   </h4>
                   <div style={{ marginBottom: '1rem' }}>
                     <div style={{ fontSize: '2rem', fontWeight: '700', color: '#7C3AED' }}>
-                      89%
+                      {enhancedStats.avgMentalHealth}/10
                     </div>
                     <div style={{ fontSize: '0.875rem', color: '#5B21B6' }}>
-                      Sustained progress at 12 months
+                      Average wellness score
                     </div>
                   </div>
                   <div style={{ fontSize: '0.875rem', color: '#5B21B6' }}>
-                    • 92% maintain stable housing<br/>
-                    • 87% continue employment<br/>
-                    • 94% report improved well-being
+                    • Holistic support approach<br/>
+                    • Mental & emotional health focus<br/>
+                    • Building from the inside out
                   </div>
                 </div>
               </div>
