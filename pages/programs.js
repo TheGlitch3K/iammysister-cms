@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import styled from '@emotion/styled';
 import { Home, CreditCard, Briefcase, Check, Users, TrendingUp, Target, Award } from 'lucide-react';
 import Logo from '../components/Logo';
+import { useSistersData } from '../hooks/useSistersData';
 
 const Container = styled.div`
   min-height: 100vh;
@@ -248,6 +249,7 @@ const ResourceCard = styled.a`
   border-radius: 0.5rem;
   text-decoration: none;
   color: #374151;
+  cursor: pointer;
   transition: all 0.2s;
 
   &:hover {
@@ -263,49 +265,52 @@ const ResourceCard = styled.a`
 `;
 
 export default function Programs() {
-  const [stats, setStats] = useState({
-    homeownership: 0,
-    financial: 0,
-    entrepreneurship: 0,
-    total: 0,
-    totalSavings: 0,
-    avgCreditIncrease: 52,
-    newHomeowners: 23
-  });
+  const { sisters, loading } = useSistersData();
 
-  useEffect(() => {
-    fetchProgramStats();
-  }, []);
-
-  const fetchProgramStats = async () => {
-    try {
-      const response = await fetch('/api/clients');
-      const data = await response.json();
-      
-      if (data.success) {
-        const sisters = data.data;
-        
-        // Calculate program distribution
-        const homeownership = sisters.filter(s => s.program === 'Homeownership').length;
-        const financial = sisters.filter(s => s.program === 'Financial Empowerment').length;
-        const entrepreneurship = sisters.filter(s => s.program === 'Entrepreneurship').length;
-        
-        // Calculate total savings
-        const totalSavings = sisters.reduce((sum, s) => sum + (s.savingsAmount || 0), 0);
-        
-        setStats({
-          homeownership,
-          financial,
-          entrepreneurship,
-          total: sisters.length,
-          totalSavings,
-          avgCreditIncrease: 52, // This could be calculated from historical data
-          newHomeowners: sisters.filter(s => s.housingStatus && s.housingStatus.includes('Closed')).length
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching program stats:', error);
+  // Calculate program statistics from real sisters data
+  const stats = useMemo(() => {
+    if (!Array.isArray(sisters) || sisters.length === 0) {
+      return {
+        homeownership: 0,
+        financial: 0,
+        entrepreneurship: 0,
+        total: 0,
+        totalSavings: 0,
+        avgCreditIncrease: 52,
+        newHomeowners: 0
+      };
     }
+
+    // Calculate program distribution
+    const homeownership = sisters.filter(s => s.program === 'Homeownership').length;
+    const financial = sisters.filter(s => s.program === 'Financial Empowerment').length;
+    const entrepreneurship = sisters.filter(s => s.program === 'Entrepreneurship').length;
+    
+    // Calculate total savings
+    const totalSavings = sisters.reduce((sum, s) => sum + (s.savingsAmount || 0), 0);
+    
+    // Count new homeowners (those who are closed or under contract)
+    const newHomeowners = sisters.filter(s => 
+      s.housingStatus && (
+        s.housingStatus.includes('Closed') || 
+        s.housingStatus.includes('Under contract') ||
+        s.housingStatus.includes('Pre-approved')
+      )
+    ).length;
+
+    return {
+      homeownership,
+      financial,
+      entrepreneurship,
+      total: sisters.length,
+      totalSavings,
+      avgCreditIncrease: 52, // This could be calculated from historical data
+      newHomeowners
+    };
+  }, [sisters]);
+
+  const navigateTo = (path) => {
+    window.location.href = path;
   };
 
   return (
@@ -315,10 +320,10 @@ export default function Programs() {
           <LogoSection>
             <Logo size="small" />
             <Nav>
-              <NavButton onClick={() => window.location.href = '/'}>Dashboard</NavButton>
-              <NavButton onClick={() => window.location.href = '/sisters'}>Sisters</NavButton>
+              <NavButton onClick={() => navigateTo('/')}>Dashboard</NavButton>
+              <NavButton onClick={() => navigateTo('/sisters')}>Sisters</NavButton>
               <NavButton active>Programs</NavButton>
-              <NavButton onClick={() => window.location.href = '/reports'}>Reports</NavButton>
+              <NavButton onClick={() => navigateTo('/reports')}>Reports</NavButton>
             </Nav>
           </LogoSection>
         </HeaderContent>
@@ -371,7 +376,10 @@ export default function Programs() {
               </FeatureItem>
             </FeatureList>
             
-            <EnrollButton background="#F59E0B">
+            <EnrollButton 
+              background="#F59E0B"
+              onClick={() => navigateTo('/questionnaire')}
+            >
               Learn More About Homeownership
             </EnrollButton>
           </ProgramCard>
@@ -416,7 +424,10 @@ export default function Programs() {
               </FeatureItem>
             </FeatureList>
             
-            <EnrollButton background="#14B8A6">
+            <EnrollButton 
+              background="#14B8A6"
+              onClick={() => navigateTo('/questionnaire')}
+            >
               Start Your Financial Journey
             </EnrollButton>
           </ProgramCard>
@@ -461,7 +472,10 @@ export default function Programs() {
               </FeatureItem>
             </FeatureList>
             
-            <EnrollButton background="#A78BFA">
+            <EnrollButton 
+              background="#A78BFA"
+              onClick={() => navigateTo('/questionnaire')}
+            >
               Launch Your Business Dream
             </EnrollButton>
           </ProgramCard>
@@ -469,6 +483,9 @@ export default function Programs() {
 
         <ImpactSection>
           <ImpactTitle>Our Collective Impact</ImpactTitle>
+          <p style={{ fontSize: '1.125rem', marginBottom: '2rem', opacity: '0.95' }}>
+            Building Women Up From The Inside Out - Real results from our sister community
+          </p>
           <ImpactGrid>
             <ImpactStat>
               <div className="number">{stats.total}</div>
@@ -492,7 +509,7 @@ export default function Programs() {
         <ResourcesSection>
           <ResourcesTitle>Program Resources</ResourcesTitle>
           <ResourcesGrid>
-            <ResourceCard href="/questionnaire">
+            <ResourceCard onClick={() => navigateTo('/questionnaire')}>
               <Target />
               <div>
                 <strong>Apply for Programs</strong>
@@ -501,7 +518,7 @@ export default function Programs() {
                 </p>
               </div>
             </ResourceCard>
-            <ResourceCard href="/sisters">
+            <ResourceCard onClick={() => navigateTo('/sisters')}>
               <Award />
               <div>
                 <strong>Success Stories</strong>
@@ -510,7 +527,7 @@ export default function Programs() {
                 </p>
               </div>
             </ResourceCard>
-            <ResourceCard href="/reports">
+            <ResourceCard onClick={() => navigateTo('/reports')}>
               <Users />
               <div>
                 <strong>Program Impact</strong>
