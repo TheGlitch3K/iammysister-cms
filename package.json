@@ -8,8 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "export": "next build",
-    "deploy": "npm run export && touch ./dist/.nojekyll"
+    "export": "next build && touch ./out/.nojekyll",
+    "deploy": "npm run export"
   },
   "keywords": [],
   "author": "",

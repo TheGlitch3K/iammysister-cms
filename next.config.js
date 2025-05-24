@@ -7,9 +7,12 @@ const nextConfig = {
     unoptimized: true
   },
   output: 'export',
-  distDir: 'dist',
-  basePath: process.env.NODE_ENV === 'production' ? '/iammysister-cms' : '',
-  assetPrefix: process.env.NODE_ENV === 'production' ? '/iammysister-cms/' : '',
+  distDir: 'out',
+  basePath: '/iammysister-cms',
+  assetPrefix: '/iammysister-cms/',
+  experimental: {
+    esmExternals: false
+  }
 }
 
 module.exports = nextConfig
