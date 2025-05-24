@@ -13,15 +13,15 @@ git add .
 # Commit changes
 git commit -m "Initial commit: I AM MY SISTER Client Management System"
 
-# Add remote repository (replace with your GitHub repo)
-git remote add origin https://github.com/yourusername/iammysister-cms.git
+# Add remote repository (create this repo on GitHub first)
+git remote add origin https://github.com/theglitch3k/iammysister-cms.git
 
 # Push to GitHub
 git push -u origin main
 ```
 
 ### 2. Enable GitHub Pages
-1. Go to your GitHub repository
+1. Go to your GitHub repository: https://github.com/theglitch3k/iammysister-cms
 2. Click **Settings** tab
 3. Scroll down to **Pages** section
 4. Under **Source**, select **GitHub Actions**
@@ -30,7 +30,7 @@ git push -u origin main
 ### 3. Access Your Live Site
 Your site will be available at:
 ```
-https://yourusername.github.io/iammysister-cms/
+https://theglitch3k.github.io/iammysister-cms/
 ```
 
 ## 🔧 What's Configured
