@@ -10,7 +10,7 @@ import {
 import { format } from 'date-fns';
 import Logo from '../components/Logo';
 import QuickView from '../components/QuickView';
-import { fetchClients, calculateStats, exportToCSV } from '../lib/googleSheets';
+import { useSistersData } from '../hooks/useSistersData';
 
 // Styled Components
 const Container = styled.div`
@@ -377,37 +377,54 @@ const HeartRating = styled.div`
 // Main Component
 export default function Dashboard() {
   const router = useRouter();
-  const [clients, setClients] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [programFilter, setProgramFilter] = useState('all');
+  const { 
+    sisters, 
+    filteredSisters, 
+    loading, 
+    searchTerm, 
+    setSearchTerm, 
+    stats,
+    filters,
+    setFilters
+  } = useSistersData();
+  
   const [selectedClient, setSelectedClient] = useState(null);
   const [showQuickView, setShowQuickView] = useState(false);
-  const [stats, setStats] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('');
 
-  // Fetch clients on mount
-  useEffect(() => {
-    loadClients();
-    const interval = setInterval(loadClients, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const loadClients = async () => {
-    try {
-      const data = await fetchClients();
-      setClients(data);
-      const calculatedStats = calculateStats(data);
-      setStats(calculatedStats);
-      setLoading(false);
-    } catch (error) {
-      console.error('Error loading clients:', error);
-      setLoading(false);
+  // Calculate enhanced stats from sisters data
+  const enhancedStats = useMemo(() => {
+    if (!Array.isArray(sisters) || sisters.length === 0) {
+      return {
+        total: 0,
+        newClients: 0,
+        housingReady: 0,
+        avgMentalHealth: 0,
+        totalSavings: 0
+      };
     }
-  };
+
+    const total = sisters.length;
+    const newClients = sisters.filter(s => s.status === 'new').length;
+    const housingReady = sisters.filter(s => 
+      (s.creditScore || 0) >= 620 && (s.monthlyIncome || 0) >= 3000
+    ).length;
+    const avgMentalHealth = total > 0 ? 
+      (sisters.reduce((sum, s) => sum + (s.mentalScore || s.mentalHealthScore || 5), 0) / total).toFixed(1) 
+      : 0;
+    const totalSavings = sisters.reduce((sum, s) => sum + (s.savingsAmount || 0), 0);
+
+    return {
+      total,
+      newClients,
+      housingReady,
+      avgMentalHealth,
+      totalSavings
+    };
+  }, [sisters]);
 
   const filteredClients = useMemo(() => {
-    let filtered = clients;
+    let filtered = sisters;
 
     if (searchTerm) {
       filtered = filtered.filter(client => 
@@ -417,7 +434,7 @@ export default function Dashboard() {
       );
     }
 
-    if (statusFilter !== 'all') {
+    if (statusFilter) {
       filtered = filtered.filter(client => {
         const clientStatus = (client.status || '').toLowerCase().trim();
         const filterStatus = statusFilter.toLowerCase().trim();
@@ -425,15 +442,29 @@ export default function Dashboard() {
       });
     }
 
-    if (programFilter !== 'all') {
-      filtered = filtered.filter(client => client.program === programFilter);
-    }
-
     return filtered;
-  }, [clients, searchTerm, statusFilter, programFilter]);
+  }, [sisters, searchTerm, statusFilter]);
 
   const handleExport = () => {
-    exportToCSV(filteredClients);
+    const headers = ['Name', 'Email', 'Phone', 'Program', 'Credit Score', 'Monthly Income', 'Status', 'Applied'];
+    const rows = filteredClients.map(c => [
+      `${c.firstName} ${c.lastName}`,
+      c.email,
+      c.phone,
+      c.program,
+      c.creditScore,
+      c.monthlyIncome,
+      c.status,
+      formatDate(c.timestamp)
+    ]);
+
+    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'sisters_export.csv';
+    a.click();
   };
 
   const formatDate = (date) => {
@@ -451,9 +482,9 @@ export default function Dashboard() {
   };
 
   const getStatusCount = (status) => {
-    if (!Array.isArray(clients)) return 0;
-    if (status === 'all') return clients.length;
-    return clients.filter(c => {
+    if (!Array.isArray(sisters)) return 0;
+    if (status === 'all') return sisters.length;
+    return sisters.filter(c => {
       const clientStatus = (c.status || '').toLowerCase().trim();
       return clientStatus === status.toLowerCase().trim();
     }).length;
@@ -509,7 +540,7 @@ export default function Dashboard() {
           <>
             <WelcomeBanner>
               <h1>Welcome to Sister Success Dashboard</h1>
-              <p>Empowering {stats?.total || 0} women on their journey to financial independence and homeownership</p>
+              <p>Empowering {enhancedStats.total} women on their journey to financial independence and homeownership</p>
             </WelcomeBanner>
 
             <StatsGrid>
@@ -517,10 +548,10 @@ export default function Dashboard() {
                 <StatHeader>
                   <StatInfo>
                     <h3>Total Sisters</h3>
-                    <div className="value">{stats?.total || 0}</div>
+                    <div className="value">{enhancedStats.total}</div>
                     <div className="change">
                       <Sparkles size={16} />
-                      {stats?.newClients || 0} new this week
+                      {enhancedStats.newClients} new this week
                     </div>
                   </StatInfo>
                   <IconWrapper bg="#CCFBF1" color="#14B8A6">
@@ -533,7 +564,7 @@ export default function Dashboard() {
                 <StatHeader>
                   <StatInfo>
                     <h3>Housing Ready</h3>
-                    <div className="value">{stats?.housingReady || 0}</div>
+                    <div className="value">{enhancedStats.housingReady}</div>
                     <div className="change">
                       <Home size={16} />
                       Credit & income qualified
@@ -549,7 +580,7 @@ export default function Dashboard() {
                 <StatHeader>
                   <StatInfo>
                     <h3>Wellness Score</h3>
-                    <div className="value">{stats?.avgMentalHealth || 0}/10</div>
+                    <div className="value">{enhancedStats.avgMentalHealth}/10</div>
                     <div className="change">
                       <Heart size={16} />
                       Mental & emotional health
@@ -565,7 +596,7 @@ export default function Dashboard() {
                 <StatHeader>
                   <StatInfo>
                     <h3>Collective Savings</h3>
-                    <div className="value">${((stats?.totalSavings || 0) / 1000).toFixed(0)}K</div>
+                    <div className="value">${((enhancedStats.totalSavings) / 1000).toFixed(0)}K</div>
                     <div className="change">
                       <TrendingUp size={16} />
                       Building wealth together
@@ -590,7 +621,7 @@ export default function Dashboard() {
 
             <FilterSection>
               <span style={{ fontWeight: 500, color: '#6B7280' }}>Status:</span>
-              <FilterButton active={statusFilter === 'all'} onClick={() => setStatusFilter('all')}>
+              <FilterButton active={statusFilter === ''} onClick={() => setStatusFilter('')}>
                 All ({getStatusCount('all')})
               </FilterButton>
               <FilterButton active={statusFilter === 'new'} onClick={() => setStatusFilter('new')}>
@@ -599,8 +630,8 @@ export default function Dashboard() {
               <FilterButton active={statusFilter === 'contacted'} onClick={() => setStatusFilter('contacted')}>
                 Contacted ({getStatusCount('contacted')})
               </FilterButton>
-              <FilterButton active={statusFilter === 'high-priority'} onClick={() => setStatusFilter('high-priority')}>
-                High Priority ({getStatusCount('high-priority')})
+              <FilterButton active={statusFilter === 'in-progress'} onClick={() => setStatusFilter('in-progress')}>
+                In Progress ({getStatusCount('in-progress')})
               </FilterButton>
               <FilterButton active={statusFilter === 'qualified'} onClick={() => setStatusFilter('qualified')}>
                 Qualified ({getStatusCount('qualified')})
@@ -689,11 +720,11 @@ export default function Dashboard() {
                             <Heart
                               key={i}
                               size={16}
-                              fill={i < (client.mentalScore || 5) ? '#EC4899' : 'none'}
-                              color={i < (client.mentalScore || 5) ? '#EC4899' : '#E5E7EB'}
+                              fill={i < (client.mentalScore || client.mentalHealthScore || 5) ? '#EC4899' : 'none'}
+                              color={i < (client.mentalScore || client.mentalHealthScore || 5) ? '#EC4899' : '#E5E7EB'}
                             />
                           ))}
-                          <span>{client.mentalScore || 5}/10</span>
+                          <span>{client.mentalScore || client.mentalHealthScore || 5}/10</span>
                         </HeartRating>
                       </td>
                       <td>
@@ -747,12 +778,8 @@ export default function Dashboard() {
           sister={selectedClient}
           onClose={handleCloseQuickView}
           onUpdate={(sisterId, updates) => {
-            // Update the client in the local state
-            setClients(prev => prev.map(client => 
-              client.id === sisterId 
-                ? { ...client, ...updates }
-                : client
-            ));
+            // This will be handled by the useSistersData hook
+            console.log('Update sister:', sisterId, updates);
           }}
         />
       )}
